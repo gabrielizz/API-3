@@ -1,0 +1,66 @@
+require('dotenv').config();
+const express = require('express');
+const passport = require('passport');
+const TwitterStrategy = require('passport-twitter').Strategy;
+const session = require('express-session');
+const Twit = require('twit');
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+// Configuração do Passport
+passport.use(new TwitterStrategy({
+  consumerKey: process.env.TWITTER_CONSUMER_KEY,
+  consumerSecret: process.env.TWITTER_CONSUMER_SECRET,
+  callbackURL: "http://localhost:3000/auth/twitter/callback"
+}, function(token, tokenSecret, profile, cb) {
+  return cb(null, {profile: profile, token: token, tokenSecret: tokenSecret});
+}));
+
+passport.serializeUser(function(user, cb) {
+  cb(null, user);
+});
+
+passport.deserializeUser(function(obj, cb) {
+  cb(null, obj);
+});
+
+app.use(session({ secret: 'secret', resave: true, saveUninitialized: true }));
+app.use(passport.initialize());
+app.use(passport.session());
+
+app.get('/auth/twitter', passport.authenticate('twitter'));
+
+app.get('/auth/twitter/callback', passport.authenticate('twitter', { failureRedirect: '/' }), function(req, res) {
+  res.redirect('/');
+});
+
+app.get('/logout', (req, res) => {
+  req.logout();
+  res.redirect('/');
+});
+
+app.get('/post-tweet', (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.redirect('/auth/twitter');
+  }
+
+  const T = new Twit({
+    consumer_key: process.env.TWITTER_CONSUMER_KEY,
+    consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
+    access_token: req.user.token,
+    access_token_secret: req.user.tokenSecret
+  });
+
+  T.post('statuses/update', { status: 'Hello World!' }, function(err, data, response) {
+    if (err) {
+      res.status(500).send(err);
+    } else {
+      res.send('Tweet posted successfully');
+    }
+  });
+});
+
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
+});
